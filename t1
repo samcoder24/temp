@@ -1,0 +1,61 @@
+@ExtendWith(MockitoExtension.class)
+class ConversationServiceTest {
+
+    @InjectMocks
+    private ConversationService conversationService;
+
+    @Mock
+    private RetrieveConversationService retrieveConversationService;
+
+    @Mock
+    private ConversationHistoryService conversationHistoryService;
+
+    @Test
+    void testCursorHandler_shouldReturnConversationPanel() {
+        // Arrange
+        long conversationId = 123L;
+        long userId = 456L;
+        long cursorId = 0L;
+        String sortOrder = "ASC";
+        int limit = 10;
+        long total = 12L;
+
+        RetrieveConversationCommand command = mock(RetrieveConversationCommand.class);
+        when(command.getConversationId()).thenReturn(conversationId);
+        when(command.getUserId()).thenReturn(userId);
+        when(command.getCursorId()).thenReturn(cursorId);
+        when(command.getSortOrder()).thenReturn(sortOrder);
+        when(command.getLimit()).thenReturn(Optional.of(limit));
+
+        when(retrieveConversationService.getTotal(conversationId, userId)).thenReturn(total);
+
+        ConversationHistoryKey key = ConversationHistoryKey.builder()
+                .conversationId(conversationId)
+                .userId(userId)
+                .build();
+
+        Set<ConversationHistory> conversationCache = new HashSet<>();
+        when(conversationHistoryService.getFromCache(key)).thenReturn(conversationCache);
+
+        List<ConversationHistory> conversationList = new ArrayList<>();
+        ConversationHistory history = mock(ConversationHistory.class);
+        when(history.getId()).thenReturn(999L);
+        conversationList.add(history);
+
+        when(conversationService.getConversationHistoryForCursor(
+                anySet(), eq(key), eq(limit), eq(cursorId), eq(sortOrder))
+        ).thenReturn(conversationList);
+
+        // Act
+        ConversationPanel result = conversationService.cursorHandler(command);
+
+        // Assert
+        assertNotNull(result);
+        assertEquals(total, result.getTotal());
+        assertEquals(limit, result.getLimit());
+        assertEquals(cursorId, result.getCursorId());
+        assertEquals(999L, result.getNextCursorId());
+        assertEquals(sortOrder, result.getSortOrder());
+        assertEquals(1, result.getConversations().size());
+    }
+}
