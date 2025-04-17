@@ -1,0 +1,138 @@
+package com.gartner.search.application.conversation;
+
+import com.gartner.search.domain.exception.NotFoundException;
+import com.gartner.search.domain.model.conversation.ConversationHistory;
+import com.gartner.search.domain.model.conversation.ConversationPanel;
+import com.gartner.search.domain.model.conversation.service.RegisterNewConversationTopicService;
+import com.gartner.search.domain.model.conversation.service.RetrieveConversationService;
+import com.gartner.search.model.ConversationHistoryKey;
+import com.gartner.search.service.ConversationHistoryService;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.*;
+import java.util.*;
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
+
+class RetrieveConversationHandlerTest {
+
+    @Mock
+    private RetrieveConversationService retrieveConversationService;
+
+    @Mock
+    private ConversationHistoryService<ConversationHistoryKey, ConversationHistory> conversationHistoryService;
+
+    @Mock
+    private RegisterNewConversationTopicService registerNewConversationTopicService;
+
+    @InjectMocks
+    private RetrieveConversationHandler handler;
+
+    @BeforeEach
+    void setUp() {
+        MockitoAnnotations.openMocks(this);
+        handler = new RetrieveConversationHandler(retrieveConversationService, conversationHistoryService, registerNewConversationTopicService);
+    }
+
+    @Test
+    void testCursorHandler_returnsValidConversationPanel() {
+        // Arrange
+        long conversationId = 100L;
+        long userId = 200L;
+        long cursorId = 10L;
+        String sortOrder = "ASC";
+        int limit = 3;
+        long totalConversations = 10L;
+
+        RetrieveConversationCommand command = mock(RetrieveConversationCommand.class);
+        when(command.getConversationId()).thenReturn(conversationId);
+        when(command.getUserId()).thenReturn(userId);
+        when(command.getCursorId()).thenReturn(cursorId);
+        when(command.getSortOrder()).thenReturn(sortOrder);
+        when(command.getLimit()).thenReturn(Optional.of(limit));
+
+        Set<ConversationHistory> cachedConversations = new LinkedHashSet<>();
+        for (long i = 1; i <= 5; i++) {
+            ConversationHistory history = mock(ConversationHistory.class);
+            when(history.getId()).thenReturn(i);
+            cachedConversations.add(history);
+        }
+
+        when(retrieveConversationService.getTotal(conversationId, userId)).thenReturn(totalConversations);
+        when(conversationHistoryService.getFromCache(any())).thenReturn(cachedConversations);
+        when(registerNewConversationTopicService.count(userId)).thenReturn(0L);
+
+        // Act
+        ConversationPanel panel = handler.cursorHandler(command);
+
+        // Assert
+        assertNotNull(panel);
+        assertEquals(totalConversations, panel.getTotal());
+        assertEquals(limit, panel.getLimit());
+        assertEquals(cursorId, panel.getCursorId());
+        assertEquals(sortOrder, panel.getSortOrder());
+        assertNotNull(panel.getConversations());
+        assertTrue(panel.getNextCursorId() >= 0);
+    }
+
+    @Test
+    void testCursorHandler_emptyCache_fetchesFromDB() {
+        // Arrange
+        long conversationId = 101L;
+        long userId = 201L;
+        long cursorId = 0L;
+        String sortOrder = "DESC";
+        int limit = 2;
+
+        RetrieveConversationCommand command = mock(RetrieveConversationCommand.class);
+        when(command.getConversationId()).thenReturn(conversationId);
+        when(command.getUserId()).thenReturn(userId);
+        when(command.getCursorId()).thenReturn(cursorId);
+        when(command.getSortOrder()).thenReturn(sortOrder);
+        when(command.getLimit()).thenReturn(Optional.of(limit));
+
+        Set<ConversationHistory> emptyCache = new LinkedHashSet<>();
+        List<ConversationHistory> dbConversations = new ArrayList<>();
+        for (long i = 20; i >= 19; i--) {
+            ConversationHistory history = mock(ConversationHistory.class);
+            when(history.getId()).thenReturn(i);
+            dbConversations.add(history);
+        }
+
+        when(retrieveConversationService.getTotal(conversationId, userId)).thenReturn(15L);
+        when(conversationHistoryService.getFromCache(any())).thenReturn(emptyCache);
+        when(registerNewConversationTopicService.count(userId)).thenReturn(0L);
+        when(retrieveConversationService.retrieve(eq(conversationId), eq(userId), isNull(), eq(sortOrder), eq(limit))).thenReturn(dbConversations);
+
+        // Act
+        ConversationPanel panel = handler.cursorHandler(command);
+
+        // Assert
+        assertNotNull(panel);
+        assertEquals(15L, panel.getTotal());
+        assertEquals(limit, panel.getLimit());
+        assertEquals(cursorId, panel.getCursorId());
+        assertEquals(sortOrder, panel.getSortOrder());
+        assertEquals(2, panel.getConversations().size());
+        assertEquals(19L, panel.getNextCursorId());
+    }
+
+    @Test
+    void testCursorHandler_throwsNotFound_whenDbReturnsEmpty() {
+        // Arrange
+        RetrieveConversationCommand command = mock(RetrieveConversationCommand.class);
+        when(command.getConversationId()).thenReturn(999L);
+        when(command.getUserId()).thenReturn(888L);
+        when(command.getCursorId()).thenReturn(null);
+        when(command.getSortOrder()).thenReturn("ASC");
+        when(command.getLimit()).thenReturn(Optional.of(5));
+
+        when(conversationHistoryService.getFromCache(any())).thenReturn(Collections.emptySet());
+        when(retrieveConversationService.getTotal(anyLong(), anyLong())).thenReturn(20L);
+        when(registerNewConversationTopicService.count(anyLong())).thenReturn(0L);
+        when(retrieveConversationService.retrieve(anyLong(), anyLong(), isNull(), anyString(), anyInt())).thenReturn(Collections.emptyList());
+
+        // Act + Assert
+        assertThrows(NotFoundException.class, () -> handler.cursorHandler(command));
+    }
+}
