@@ -1,0 +1,66 @@
+package com.gartner.search.application.conversation;
+
+import com.gartner.search.domain.model.conversation.ConversationPanel;
+import com.gartner.search.model.response.ConversationPanelResponse;
+import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.MockMvc;
+
+import java.util.Optional;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+
+@WebMvcTest(controllers = YourControllerClassName.class)
+class RetrieveConversationControllerTest {
+
+    @Autowired
+    private MockMvc mockMvc;
+
+    @MockBean
+    private RetrieveConversationHandler retrieveConversationHandler;
+
+    @MockBean
+    private SecurityHelper securityHelper; // Assuming SecurityHelper#getUserId() is used
+
+    @Test
+    void testRetrieveConversation_returnsOkResponse() throws Exception {
+        Long conversationId = 101L;
+        Long userId = 201L;
+        Long cursorId = 0L;
+        String sortOrder = "DESC";
+        int limit = 2;
+
+        // Mock SecurityHelper
+        when(securityHelper.getUserId()).thenReturn(userId.toString());
+
+        // Mock ConversationPanel response
+        ConversationPanel panel = new ConversationPanel();
+        panel.setCursorId(cursorId);
+        panel.setSortOrder(sortOrder);
+        panel.setLimit(limit);
+        panel.setTotal(15L);
+        panel.setNextCursorId(19L);
+        panel.setConversations(List.of(/* Mock conversations if needed */));
+
+        when(retrieveConversationHandler.cursorHandler(any())).thenReturn(panel);
+
+        mockMvc.perform(get("/v3/history/{conversation_id}", conversationId)
+                        .param("cursorId", cursorId.toString())
+                        .param("sortOrder", sortOrder)
+                        .param("limit", String.valueOf(limit))
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.cursorId").value(cursorId))
+                .andExpect(jsonPath("$.sortOrder").value(sortOrder))
+                .andExpect(jsonPath("$.limit").value(limit))
+                .andExpect(jsonPath("$.total").value(15))
+                .andExpect(jsonPath("$.nextCursorId").value(19));
+    }
+}
