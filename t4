@@ -2,7 +2,7 @@
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.ANY)
 @Transactional
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-class ChatHistoryRepositoryIntegrationTest {
+class ChatHistoryRepositoryCustomImplTest {
 
     @Autowired
     private TestEntityManager entityManager;
@@ -16,30 +16,49 @@ class ChatHistoryRepositoryIntegrationTest {
 
     @BeforeEach
     void initData() {
-        // Insert mock data
-        entityManager.persist(new ChatHistoryEntity(1L, 1001L, 2001L, 0, 101L)); // ID, conversationId, userId, responseCode, createdAt
-        entityManager.persist(new ChatHistoryEntity(2L, 1001L, 2001L, 0, 102L));
-        entityManager.persist(new ChatHistoryEntity(3L, 1001L, 2001L, 1, 103L));
+        // Inserting 3 mock records with different combinations
+        insertEntity(1L, 1001L, 2001L, 0);
+        insertEntity(2L, 1001L, 2001L, 0);
+        insertEntity(3L, 1001L, 2001L, 1);
+    }
+
+    private void insertEntity(Long id, Long convId, Long userId, int responseCode) {
+        ChatHistoryEntity entity = new ChatHistoryEntity();
+        entity.setQuestion("Q" + id);
+        entity.setAnswer("A" + id);
+        entity.setConversationId(convId);
+        entity.setUserId(userId);
+        entity.setResponseCode(responseCode);
+        entity.setTraceId("trace-" + id);
+        entity.setAction("action-" + id);
+        entity.setActionInput("input-" + id);
+        entity.setThought("thought-" + id);
+        entity.setSearchResultIds("search-" + id);
+        entity.setImageSearchResultIds("imgsearch-" + id);
+        entity.setAnswerImages("img-" + id);
+        entity.setSources("source-" + id);
+        entity.setFollowupQuestions("follow-" + id);
+        entityManager.persist(entity);
     }
 
     @Test
-    void testGetDynamicQueryResults_withDescendingSort_andCursor() {
+    void testGetDynamicQueryResults_descendingSort_withCursor() {
         List<ChatHistoryEntity> results = chatHistoryRepo.getDynamicQueryResults(
                 entityManager.getEntityManager(),
-                1001L,            // conversationId
-                2001L,            // userId
-                0,                // responseCode
-                2L,               // cursorId
-                "DESC",           // sortOrder
-                10                // limit
+                1001L,
+                2001L,
+                0,
+                2L,
+                "DESC",
+                10
         );
 
         assertEquals(1, results.size());
-        assertEquals(1L, results.get(0).getId());
+        assertTrue(results.stream().allMatch(e -> e.getId() < 2L));
     }
 
     @Test
-    void testGetDynamicQueryResults_withAscendingSort_andNoCursor() {
+    void testGetDynamicQueryResults_ascendingSort_withoutCursor() {
         List<ChatHistoryEntity> results = chatHistoryRepo.getDynamicQueryResults(
                 entityManager.getEntityManager(),
                 1001L,
@@ -51,7 +70,7 @@ class ChatHistoryRepositoryIntegrationTest {
         );
 
         assertEquals(2, results.size());
-        assertEquals(1L, results.get(0).getId());
-        assertEquals(2L, results.get(1).getId());
+        assertEquals("Q1", results.get(0).getQuestion());
+        assertEquals("Q2", results.get(1).getQuestion());
     }
 }
