@@ -111,14 +111,21 @@ class RetrieveConversationHandlerTest {
 
     // Utility method to create a ConversationHistory with private ID set via reflection
     private ConversationHistory createConversationHistoryWithId(Long id) {
-        ConversationHistory history = new ConversationHistory();
-        try {
-            Field field = ConversationHistory.class.getDeclaredField("id");
-            field.setAccessible(true);
-            field.set(history, id);
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to set id", e);
-        }
+    try {
+        // Use reflection to access the private constructor
+        Constructor<ConversationHistory> constructor = ConversationHistory.class.getDeclaredConstructor();
+        constructor.setAccessible(true);
+        ConversationHistory history = constructor.newInstance();
+
+        // Set the private id field
+        Field field = ConversationHistory.class.getDeclaredField("id");
+        field.setAccessible(true);
+        field.set(history, id);
+
         return history;
+    } catch (Exception e) {
+        throw new RuntimeException("Failed to create ConversationHistory with id: " + id, e);
     }
+}
+
 }
