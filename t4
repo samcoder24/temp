@@ -1,0 +1,57 @@
+@SpringBootTest
+@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.ANY)
+@Transactional
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
+class ChatHistoryRepositoryIntegrationTest {
+
+    @Autowired
+    private TestEntityManager entityManager;
+
+    private ChatHistoryRepositoryCustomImpl chatHistoryRepo;
+
+    @BeforeAll
+    void setUp() {
+        chatHistoryRepo = new ChatHistoryRepositoryCustomImpl();
+    }
+
+    @BeforeEach
+    void initData() {
+        // Insert mock data
+        entityManager.persist(new ChatHistoryEntity(1L, 1001L, 2001L, 0, 101L)); // ID, conversationId, userId, responseCode, createdAt
+        entityManager.persist(new ChatHistoryEntity(2L, 1001L, 2001L, 0, 102L));
+        entityManager.persist(new ChatHistoryEntity(3L, 1001L, 2001L, 1, 103L));
+    }
+
+    @Test
+    void testGetDynamicQueryResults_withDescendingSort_andCursor() {
+        List<ChatHistoryEntity> results = chatHistoryRepo.getDynamicQueryResults(
+                entityManager.getEntityManager(),
+                1001L,            // conversationId
+                2001L,            // userId
+                0,                // responseCode
+                2L,               // cursorId
+                "DESC",           // sortOrder
+                10                // limit
+        );
+
+        assertEquals(1, results.size());
+        assertEquals(1L, results.get(0).getId());
+    }
+
+    @Test
+    void testGetDynamicQueryResults_withAscendingSort_andNoCursor() {
+        List<ChatHistoryEntity> results = chatHistoryRepo.getDynamicQueryResults(
+                entityManager.getEntityManager(),
+                1001L,
+                2001L,
+                0,
+                null,
+                "ASC",
+                10
+        );
+
+        assertEquals(2, results.size());
+        assertEquals(1L, results.get(0).getId());
+        assertEquals(2L, results.get(1).getId());
+    }
+}
