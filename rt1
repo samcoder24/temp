@@ -1,0 +1,46 @@
+@Test
+void testCursorHandler_withDescSortOrder_shouldReturnExpectedConversationPanel() {
+    // Arrange
+    Long conversationId = 101L;
+    Long userId = 201L;
+    Long cursorId = 8L;
+    String sortOrder = "DESC";
+    int limit = 2;
+    long totalConversations = 10L;
+
+    RetrieveConversationCommand command = mock(RetrieveConversationCommand.class);
+    when(command.getConversationId()).thenReturn(conversationId);
+    when(command.getUserId()).thenReturn(userId);
+    when(command.getCursorId()).thenReturn(cursorId);
+    when(command.getSortOrder()).thenReturn(sortOrder);
+    when(command.getLimit()).thenReturn(Optional.of(limit));
+
+    // Conversations with IDs lower than cursorId
+    ConversationHistory history1 = new ConversationHistory();
+    history1.setId(8L);
+    ConversationHistory history2 = new ConversationHistory();
+    history2.setId(7L);
+    ConversationHistory history3 = new ConversationHistory();
+    history3.setId(6L);
+
+    Set<ConversationHistory> cacheSet = new LinkedHashSet<>(List.of(history1, history2, history3));
+
+    when(conversationHistoryService.getFromCache(any())).thenReturn(cacheSet);
+    when(registerNewConversationTopicService.count(anyLong())).thenReturn(0L);
+    when(retrieveConversationService.getTotal(conversationId, userId)).thenReturn(totalConversations);
+
+    // Act
+    ConversationPanel result = retrieveConversationHandler.cursorHandler(command);
+
+    // Assert
+    assertNotNull(result);
+    assertEquals(limit, result.getLimit());
+    assertEquals(totalConversations, result.getTotal());
+    assertEquals(sortOrder, result.getSortOrder());
+    assertEquals(cursorId, result.getCursorId());
+    assertEquals(history2.getId(), result.getNextCursorId());
+    
+    List<ConversationHistory> conversations = result.getConversations();
+    assertEquals(2, conversations.size());
+    assertTrue(conversations.get(0).getId() > conversations.get(1).getId(), "Should be in descending order");
+}
