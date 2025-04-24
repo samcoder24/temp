@@ -1,0 +1,46 @@
+@SpringBootTest
+@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.ANY)
+@Transactional
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
+class ChatHistoryRepositoryCustomImplTest {
+
+    @Autowired
+    private TestEntityManager entityManager;
+
+    @Autowired
+    private ChatHistoryRepository chatHistoryRepository;
+
+    @PersistenceContext
+    private EntityManager em;
+
+    @BeforeEach
+    void initData() {
+        chatHistoryRepository.saveAll(List.of(
+            createEntity("Q1", 1001L, 2001L, 0),
+            createEntity("Q2", 1001L, 2001L, 0),
+            createEntity("Q3", 1001L, 2001L, 1)
+        ));
+    }
+
+    private ChatHistoryEntity createEntity(String q, Long convId, Long userId, int responseCode) {
+        ChatHistoryEntity e = new ChatHistoryEntity();
+        e.setQuestion(q);
+        e.setAnswer("A_" + q);
+        e.setConversationId(convId);
+        e.setUserId(userId);
+        e.setResponseCode(responseCode);
+        e.setTraceId("trace-" + q);
+        e.setAction("action-" + q);
+        e.setActionInput("input-" + q);
+        return e;
+    }
+
+    @Test
+    void testFetchDescendingWithCursor() {
+        List<ChatHistoryEntity> results = chatHistoryRepository.getDynamicQueryResults(
+                em, 1001L, 2001L, 0, 2L, "DESC", 10);
+
+        assertEquals(1, results.size());
+        assertTrue(results.get(0).getQuestion().contains("Q1"));
+    }
+}
