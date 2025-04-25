@@ -1,0 +1,66 @@
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+import java.util.Collections;
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
+
+@ExtendWith(MockitoExtension.class)
+class YourServiceTest {
+
+    @Mock
+    private ChatHistoryRepository chatHistoryRepository;
+
+    @Mock
+    private EntityManager entityManager;
+
+    @InjectMocks
+    private YourServiceImpl yourService; // Replace with your actual service implementation name
+
+    private final Long conversationId = 1L;
+    private final Long userId = 1L;
+    private final Long cursorId = 2L;
+    private final String sortOrder = "ASC";
+    private final int limit = 10;
+
+    @BeforeEach
+    void setup() {
+        // Any setup if needed
+    }
+
+    @Test
+    void testRetrieve_success() {
+        ChatHistoryEntity entity = new ChatHistoryEntity();
+        List<ChatHistoryEntity> entities = List.of(entity);
+
+        when(chatHistoryRepository.getDynamicQueryResults(
+                any(), eq(conversationId), eq(userId), anyInt(), eq(cursorId), eq(sortOrder), eq(limit)))
+                .thenReturn(entities);
+
+        List<ConversationHistory> result = yourService.retrieve(conversationId, userId, cursorId, sortOrder, limit);
+
+        assertNotNull(result);
+        assertEquals(1, result.size());
+        // Add more assertions if needed, based on ConversationHistory fields
+        verify(chatHistoryRepository, times(1)).getDynamicQueryResults(any(), eq(conversationId), eq(userId), anyInt(), eq(cursorId), eq(sortOrder), eq(limit));
+    }
+
+    @Test
+    void testRetrieve_notFound() {
+        when(chatHistoryRepository.getDynamicQueryResults(
+                any(), eq(conversationId), eq(userId), anyInt(), eq(cursorId), eq(sortOrder), eq(limit)))
+                .thenReturn(Collections.emptyList());
+
+        NotFoundException exception = assertThrows(NotFoundException.class, () -> {
+            yourService.retrieve(conversationId, userId, cursorId, sortOrder, limit);
+        });
+
+        assertTrue(exception.getMessage().contains(String.valueOf(conversationId)));
+    }
+}
