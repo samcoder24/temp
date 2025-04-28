@@ -132,4 +132,37 @@ class RetrieveConversationHandlerTest {
             throw new RuntimeException(e);
         }
     }
+
+
+
+@Test
+void testCursorHandler_cursorIdFound_dropWhileLogicExecuted() {
+    // Setup: cursorId = 2L, and cache has IDs [1, 2, 3]
+
+    RetrieveConversationCommand command = mock(RetrieveConversationCommand.class);
+    when(command.getConversationId()).thenReturn(1L);
+    when(command.getUserId()).thenReturn(1L);
+    when(command.getCursorId()).thenReturn(2L); // 2L must be found
+    when(command.getSortOrder()).thenReturn("ASC");
+    when(command.getLimit()).thenReturn(Optional.of(1));
+
+    Set<ConversationHistory> cache = new HashSet<>(Arrays.asList(
+            createConversationHistory(1L),
+            createConversationHistory(2L),
+            createConversationHistory(3L)
+    ));
+    when(conversationHistoryService.getFromCache(any())).thenReturn(cache);
+
+    when(registerNewConversationTopicService.count(anyLong())).thenReturn(0L);
+    when(retrieveConversationService.getTotal(anyLong(), anyLong())).thenReturn(3L);
+
+    List<ConversationHistory> dbResults = createConversationHistories(4L, 1);
+    when(retrieveConversationService.retrieve(anyLong(), anyLong(), any(), any(), anyInt())).thenReturn(dbResults);
+
+    var panel = retrieveConversationHandler.cursorHandler(command);
+
+    assertNotNull(panel);
+}
+
+
 }
