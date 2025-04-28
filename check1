@@ -1,0 +1,131 @@
+package com.gartner.search.application.conversation;
+
+import com.gartner.search.domain.model.conversation.ConversationHistory;
+import com.gartner.search.domain.model.conversation.ConversationPanel;
+import com.gartner.search.model.ConversationHistoryKey;
+import com.gartner.search.service.ConversationHistoryService;
+import com.gartner.search.domain.model.conversation.service.RegisterNewConversationTopicService;
+import com.gartner.search.domain.model.conversation.service.RetrieveConversationService;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
+
+import java.util.HashSet;
+import java.util.Optional;
+import java.util.Set;
+
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
+
+class RetrieveConversationHandlerTest {
+
+    @Mock
+    private RetrieveConversationService retrieveConversationService;
+
+    @Mock
+    private ConversationHistoryService<ConversationHistoryKey, ConversationHistory> conversationHistoryService;
+
+    @Mock
+    private RegisterNewConversationTopicService registerNewConversationTopicService;
+
+    @InjectMocks
+    private RetrieveConversationHandler handler;
+
+    @BeforeEach
+    void setUp() {
+        MockitoAnnotations.openMocks(this);
+    }
+
+    private ConversationHistory createConversationHistory(Long id) {
+        ConversationHistory history = mock(ConversationHistory.class);
+        when(history.getId()).thenReturn(id);
+        return history;
+    }
+
+    @Test
+    void testCursorHandler_cursorIdNull_adjustedCacheSizeLessThanLimit() {
+        // Given
+        Long conversationId = 1L;
+        Long userId = 123L;
+        int limit = 3;
+
+        RetrieveConversationCommand command = RetrieveConversationCommand.builder()
+                .conversationId(conversationId)
+                .userId(userId)
+                .cursorId(null) // cursorId is null to trigger: if(cursorId == null)
+                .limit(Optional.of(limit))
+                .sortOrder("ASC")
+                .build();
+
+        Set<ConversationHistory> cache = new HashSet<>();
+        cache.add(createConversationHistory(1L));
+        cache.add(createConversationHistory(2L));
+
+        ConversationHistoryKey key = ConversationHistoryKey.builder()
+                .conversationId(conversationId)
+                .userId(userId)
+                .build();
+
+        when(conversationHistoryService.getFromCache(key)).thenReturn(cache);
+        when(registerNewConversationTopicService.count(userId)).thenReturn(0L);
+        when(retrieveConversationService.getTotal(conversationId, userId)).thenReturn(10L);
+
+        // Mock database retrieval when cache is insufficient
+        when(retrieveConversationService.retrieve(conversationId, userId, null, "ASC", limit)).thenReturn(
+                List.of(createConversationHistory(3L), createConversationHistory(4L), createConversationHistory(5L))
+        );
+
+        // When
+        ConversationPanel result = handler.cursorHandler(command);
+
+        // Then
+        assertNotNull(result);
+        assertEquals(limit, result.getConversations().size());
+        assertEquals(1L, result.getConversations().get(0).getId());
+    }
+
+    @Test
+    void testCursorHandler_cursorIdNotNull_sufficientRecordsAfterCursorFalse() {
+        // Given
+        Long conversationId = 1L;
+        Long userId = 123L;
+        Long cursorId = 2L;
+        int limit = 3;
+
+        RetrieveConversationCommand command = RetrieveConversationCommand.builder()
+                .conversationId(conversationId)
+                .userId(userId)
+                .cursorId(cursorId)
+                .limit(Optional.of(limit))
+                .sortOrder("ASC")
+                .build();
+
+        Set<ConversationHistory> cache = new HashSet<>();
+        cache.add(createConversationHistory(1L));
+        cache.add(createConversationHistory(2L)); // cursor present but insufficient after cursor
+        // No IDs after 2L
+
+        ConversationHistoryKey key = ConversationHistoryKey.builder()
+                .conversationId(conversationId)
+                .userId(userId)
+                .build();
+
+        when(conversationHistoryService.getFromCache(key)).thenReturn(cache);
+        when(registerNewConversationTopicService.count(userId)).thenReturn(0L);
+        when(retrieveConversationService.getTotal(conversationId, userId)).thenReturn(10L);
+
+        // Mock database retrieval because not enough conversations after cursor
+        when(retrieveConversationService.retrieve(conversationId, userId, cursorId, "ASC", limit)).thenReturn(
+                List.of(createConversationHistory(3L), createConversationHistory(4L), createConversationHistory(5L))
+        );
+
+        // When
+        ConversationPanel result = handler.cursorHandler(command);
+
+        // Then
+        assertNotNull(result);
+        assertEquals(limit, result.getConversations().size());
+    }
+}
