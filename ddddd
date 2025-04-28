@@ -1,0 +1,135 @@
+package com.gartner.search.application.conversation;
+
+import com.gartner.search.domain.model.conversation.ConversationHistory;
+import com.gartner.search.domain.model.conversation.service.RegisterNewConversationTopicService;
+import com.gartner.search.service.ConversationHistoryService;
+import com.gartner.search.domain.model.conversation.service.RetrieveConversationService;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
+
+import java.util.HashSet;
+import java.util.Set;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.*;
+
+class RetrieveConversationHandlerTest {
+
+    private RetrieveConversationService retrieveConversationService;
+    private ConversationHistoryService conversationHistoryService;
+    private RegisterNewConversationTopicService registerNewConversationTopicService;
+
+    private RetrieveConversationHandler retrieveConversationHandler;
+
+    @BeforeEach
+    void setUp() {
+        retrieveConversationService = mock(RetrieveConversationService.class);
+        conversationHistoryService = mock(ConversationHistoryService.class);
+        registerNewConversationTopicService = mock(RegisterNewConversationTopicService.class);
+        retrieveConversationHandler = new RetrieveConversationHandler(retrieveConversationService, conversationHistoryService, registerNewConversationTopicService);
+    }
+
+    private ConversationHistory createConversationHistory(Long id) {
+        ConversationHistory history = mock(ConversationHistory.class);
+        when(history.getId()).thenReturn(id);
+        return history;
+    }
+
+    @Test
+    void shouldReturnTrue_whenCursorIdIsNullAndAdjustedCacheSizeLessThanLimit() {
+        // Given
+        Set<ConversationHistory> conversationCache = new HashSet<>();
+        conversationCache.add(createConversationHistory(1L));
+        conversationCache.add(createConversationHistory(2L));
+
+        when(registerNewConversationTopicService.count(anyLong())).thenReturn(0L);
+
+        // When
+        boolean result = invokeShouldCheckDatabase(conversationCache, null, 5, 123L);
+
+        // Then
+        assertThat(result).isTrue();
+    }
+
+    @Test
+    void shouldReturnFalse_whenCursorIdIsNullAndAdjustedCacheSizeGreaterThanLimit() {
+        // Given
+        Set<ConversationHistory> conversationCache = new HashSet<>();
+        conversationCache.add(createConversationHistory(1L));
+        conversationCache.add(createConversationHistory(2L));
+        conversationCache.add(createConversationHistory(3L));
+        conversationCache.add(createConversationHistory(4L));
+        conversationCache.add(createConversationHistory(5L));
+
+        when(registerNewConversationTopicService.count(anyLong())).thenReturn(0L);
+
+        // When
+        boolean result = invokeShouldCheckDatabase(conversationCache, null, 3, 123L);
+
+        // Then
+        assertThat(result).isFalse();
+    }
+
+    @Test
+    void shouldReturnTrue_whenCursorIdNotInCache() {
+        // Given
+        Set<ConversationHistory> conversationCache = new HashSet<>();
+        conversationCache.add(createConversationHistory(1L));
+        conversationCache.add(createConversationHistory(2L));
+
+        when(registerNewConversationTopicService.count(anyLong())).thenReturn(0L);
+
+        // When
+        boolean result = invokeShouldCheckDatabase(conversationCache, 10L, 2, 123L); // cursorId 10L not in cache
+
+        // Then
+        assertThat(result).isTrue();
+    }
+
+    @Test
+    void shouldReturnTrue_whenNotEnoughRecordsAfterCursor() {
+        // Given
+        Set<ConversationHistory> conversationCache = new HashSet<>();
+        conversationCache.add(createConversationHistory(1L));
+        conversationCache.add(createConversationHistory(2L));
+        conversationCache.add(createConversationHistory(5L)); // cursorId 2L
+
+        when(registerNewConversationTopicService.count(anyLong())).thenReturn(0L);
+
+        // When
+        boolean result = invokeShouldCheckDatabase(conversationCache, 2L, 5, 123L); // not enough after cursor
+
+        // Then
+        assertThat(result).isTrue();
+    }
+
+    @Test
+    void shouldReturnFalse_whenCursorPresentAndEnoughRecordsAfterCursor() {
+        // Given
+        Set<ConversationHistory> conversationCache = new HashSet<>();
+        conversationCache.add(createConversationHistory(1L));
+        conversationCache.add(createConversationHistory(2L));
+        conversationCache.add(createConversationHistory(3L));
+        conversationCache.add(createConversationHistory(4L));
+        conversationCache.add(createConversationHistory(5L));
+
+        when(registerNewConversationTopicService.count(anyLong())).thenReturn(0L);
+
+        // When
+        boolean result = invokeShouldCheckDatabase(conversationCache, 2L, 2, 123L); // enough after cursor
+
+        // Then
+        assertThat(result).isFalse();
+    }
+
+    private boolean invokeShouldCheckDatabase(Set<ConversationHistory> cache, Long cursorId, int limit, Long userId) {
+        try {
+            var method = RetrieveConversationHandler.class.getDeclaredMethod("shouldCheckDatabaseForConversationHistory", Set.class, Long.class, int.class, Long.class);
+            method.setAccessible(true);
+            return (boolean) method.invoke(retrieveConversationHandler, cache, cursorId, limit, userId);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+}
